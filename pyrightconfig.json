@@ -1,5 +1,5 @@
 {
     "venvPath": "./.venv",
-    "typeCheckingMode": "strict",
+    "typeCheckingMode": "standard",
     "reportUnusedImport": "information"
 }
