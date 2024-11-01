@@ -10,6 +10,9 @@ from torchvision.transforms import v2
 from tqdm import tqdm
 from os import path
 import seaborn as sns
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
+import matplotlib.pyplot as plt
 
 class Args(Namespace):
     input_classes_path:str
@@ -57,30 +60,63 @@ def main():
         i=0
         features = torch.zeros((len(input_data), 512))
         labels = torch.Tensor(len(input_data))
-        for data, label in tqdm(loader, desc='Extracting features'):
-            face = detector(data)
-            face = transform(face)
-            features[i,:] = extractor(face)
-            labels[i] = label
-            i+=1
-            # with open('test.pt', 'wb') as f:
-            #     torch.save(features, f)
-        if args.save_embeddings:
-            with open(path.join(args.output_path, 'features.pt'), 'wb') as f:
-                torch.save({'data': features, 'labels': labels}, f)
-                exit(0)
+        idx_to_class = {v:k for k,v in input_data.class_to_idx.items()}
+        with torch.no_grad():
+            for data, label in tqdm(loader, desc='Extracting features'):
+                face = detector(data)
+                face = transform(face)
+                features[i,:] = extractor(face)
+                labels[i] = label
+                i+=1
+                # with open('test.pt', 'wb') as f:
+                #     torch.save(features, f)
+            if args.save_embeddings:
+                with open(path.join(args.output_path, 'features.pt'), 'wb') as f:
+                    torch.save({'data': features, 'labels': labels, 'keys': idx_to_class}, f)
+        visualize_embeddings(features=features, labels=labels, keys=idx_to_class)
     else:
-        pass
+        print(f'Loading data from process pre-extracted tensors')
+        with open(path.join(args.output_path, 'features.pt'), 'rb') as f:
+            data = torch.load(f)
+        data: LabeledDataset
+
+        visualize_embeddings(dataset=data)
 
 
 
-LabeledDataset=Dict[Literal['data', 'labels'], torch.Tensor]
-def visualize_embeddings(dataset:LabeledDataset, n_dims:int=2, algorithm:Literal['tsne','pca']='pca') -> None:
-    features = dataset['data']
-    labels = dataset['labels']
+LabeledDataset=Dict[Literal['data', 'labels', 'keys'], torch.Tensor|Dict[float, str]]
+def visualize_embeddings(features:Tensor|None=None, labels:Tensor|None=None,
+                         keys:Dict[float, str]|None=None,
+                         dataset:LabeledDataset|None=None, n_dims:int=2,
+                         algorithm:Literal['tsne','pca']='pca') -> None:
+    if dataset is not None and features is not None:
+        raise ValueError('Either pass the feature and label tensor independently, or a loaded LabeledDataset object, not both')
+    if dataset is not None:
+        features = dataset['data']
+        labels = dataset['labels']
+        keys = dataset['keys']
 
+    features = features.detach().numpy()
+    labels = labels.detach().numpy()
 
-    
+    if algorithm == 'tsne':
+        reduced = TSNE(n_components=n_dims, ).fit_transform(features)
+    elif algorithm == 'pca':
+        reduced = PCA(n_components=n_dims, ).fit_transform(features)
+    else:
+        raise ValueError(f'Unsupported value {algorithm} for dimensionality reduction')
+
+    if n_dims == 2:
+        sns.scatterplot(x=reduced[:,0], y=reduced[:,1], hue=[keys[x] for x in labels])
+    elif n_dims == 3:
+        _, ax = plt.subplots(1, 1)
+        ax.scatter(reduced[:,0], reduced[:,1], reduced[:,2], c=labels)
+        plt.legend(keys)
+    else:
+        raise ValueError(f'Currently only supporting 2- and 3-dimensional plots')
+
+    plt.title('Extracted features')
+    plt.show()
 
 
 if __name__ == '__main__':
