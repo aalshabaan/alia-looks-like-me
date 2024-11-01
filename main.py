@@ -1,5 +1,5 @@
 from argparse import ArgumentParser, Namespace
-from typing import Dict, Literal
+from typing import Dict, Literal, TypedDict
 from facenet_pytorch import MTCNN, InceptionResnetV1
 import torch
 from torch.functional import Tensor
@@ -25,6 +25,11 @@ class Args(Namespace):
     load_embeddings:bool
     # face_size:int
 
+class LabeledDataset(TypedDict):
+    data:torch.Tensor
+    labels:torch.Tensor
+    key:Dict[int, str]
+
 
 
 def parse_args() -> Namespace:
@@ -49,44 +54,31 @@ def main():
 
     if (not args.load_embeddings):
         input_data = ImageFolder(args.input_classes_path)
-        transform = v2.Compose([v2.ToImage(), v2.ToDtype(torch.float, scale=True), lambda x: x.unsqueeze(0)])
-        # input_data = ImageFolder(args.input_classes_path, transform=transform)
         loader = DataLoader(dataset=input_data, collate_fn=lambda x: x[0])
 
-        print('Creating models')
-        detector = MTCNN(device=device).eval()
-        extractor = InceptionResnetV1(pretrained='vggface2', classify=False, device=device).eval()
-
-        i=0
-        features = torch.zeros((len(input_data), 512))
-        labels = torch.Tensor(len(input_data))
-        idx_to_class = {v:k for k,v in input_data.class_to_idx.items()}
-        with torch.no_grad():
-            for data, label in tqdm(loader, desc='Extracting features'):
-                face = detector(data)
-                face = transform(face)
-                features[i,:] = extractor(face)
-                labels[i] = label
-                i+=1
-                # with open('test.pt', 'wb') as f:
-                #     torch.save(features, f)
-            if args.save_embeddings:
-                with open(path.join(args.output_path, 'features.pt'), 'wb') as f:
-                    torch.save({'data': features, 'labels': labels, 'keys': idx_to_class}, f)
-        visualize_embeddings(features=features, labels=labels, keys=idx_to_class)
+        result = extract_features(loader, device=device)
+        if args.save_embeddings:
+            with open(path.join(args.output_path, 'input.pt'), 'wb') as f:
+                torch.save(result, f)
     else:
         print(f'Loading data from process pre-extracted tensors')
-        with open(path.join(args.output_path, 'features.pt'), 'rb') as f:
-            data = torch.load(f)
-        data: LabeledDataset
-
-        visualize_embeddings(dataset=data)
+        with open(path.join(args.output_path, 'input.pt'), 'rb') as f:
+            result = torch.load(f)
 
 
+    print(f'Handling target pictures')
+    target_data = ImageFolder(args.target_class_path)
+    loader = DataLoader(dataset=target_data, collate_fn=lambda x: x[0])
+    target_result = extract_features(loader, device=device)
 
-LabeledDataset=Dict[Literal['data', 'labels', 'keys'], torch.Tensor|Dict[float, str]]
+    total_result = merge_datasets(result, target_result)
+
+    visualize_embeddings(dataset=total_result)
+
+
+
 def visualize_embeddings(features:Tensor|None=None, labels:Tensor|None=None,
-                         keys:Dict[float, str]|None=None,
+                         keys:Dict[int, str]|None=None,
                          dataset:LabeledDataset|None=None, n_dims:int=2,
                          algorithm:Literal['tsne','pca']='pca') -> None:
     if dataset is not None and features is not None:
@@ -94,7 +86,7 @@ def visualize_embeddings(features:Tensor|None=None, labels:Tensor|None=None,
     if dataset is not None:
         features = dataset['data']
         labels = dataset['labels']
-        keys = dataset['keys']
+        keys = dataset['key']
 
     features = features.detach().numpy()
     labels = labels.detach().numpy()
@@ -118,6 +110,36 @@ def visualize_embeddings(features:Tensor|None=None, labels:Tensor|None=None,
     plt.title('Extracted features')
     plt.show()
 
+
+def extract_features(loader:DataLoader, device:torch.device=torch.device('cpu')) -> LabeledDataset:
+    print('Creating models')
+    detector = MTCNN(device=device).eval()
+    extractor = InceptionResnetV1(pretrained='vggface2', classify=False, device=device).eval()
+    transform = v2.Compose([v2.ToImage(), v2.ToDtype(torch.float, scale=True), lambda x: x.unsqueeze(0)])
+
+    i=0
+    features = torch.zeros((len(loader.dataset), 512))
+    labels = torch.zeros(len(loader.dataset))
+    idx_to_class = {v:k for k,v in loader.dataset.class_to_idx.items()}
+    with torch.no_grad():
+        for data, label in tqdm(loader, desc='Extracting features'):
+            face = detector(data)
+            face = transform(face)
+            features[i,:] = extractor(face)
+            labels[i] = label
+            i+=1
+            # with open('test.pt', 'wb') as f:
+            #     torch.save(features, f)
+    return {'data': features, 'labels':labels, 'key': idx_to_class}
+
+def merge_datasets(d1:LabeledDataset, d2:LabeledDataset) -> LabeledDataset:
+    features = torch.cat((d1['data'], d2['data']), 0)
+    label_offset = len(d1['key'])
+    labels = torch.cat((d1['labels'], d2['labels'] + label_offset), 0)
+    keys = d1['key']
+    keys.update({k+label_offset:v for k,v in d2['key'].items()})
+
+    return {'data': features, 'labels': labels, 'key':keys}
 
 if __name__ == '__main__':
     main()
