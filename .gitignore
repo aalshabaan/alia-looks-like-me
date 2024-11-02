@@ -2,4 +2,4 @@
 data
 output
 target
-*.png
+output*
