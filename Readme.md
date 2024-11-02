@@ -14,7 +14,12 @@ This will have a list of used models so far, along with their results.
 - Facenet with MTCNN
 
 ## Results
-A list of results observed across different models and through time
+### First exploration
+I started by extracting facial features using Facenet and then reducing the extracted 512-dimensional vectors to 2 dimensions using PCA in order to visualize them. Thies yielded the following figure
+
+![PCA representation of 3 faces](resources/pca.png PCA)
+
+This is not very encouraging and would suggest Alia looks indeed more like my wife than me. NOT GOOD ENOUGH!
 
 ## References
 Here is a list of the resources that I've found useful in this endeavor

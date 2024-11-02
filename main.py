@@ -12,6 +12,7 @@ from os import path
 import seaborn as sns
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
+from sklearn.base import BaseEstimator, TransformerMixin
 import matplotlib.pyplot as plt
 
 class Args(Namespace):
@@ -65,6 +66,7 @@ def main():
         with open(path.join(args.output_path, 'input.pt'), 'rb') as f:
             result = torch.load(f)
 
+    pca = PCA(n_components=2).fit(result['data'])
 
     print(f'Handling target pictures')
     target_data = ImageFolder(args.target_class_path)
@@ -73,25 +75,21 @@ def main():
 
     total_result = merge_datasets(result, target_result)
 
-    visualize_embeddings(dataset=total_result)
+    visualize_embeddings(dataset=total_result, reducer=pca)
 
 
 
-def visualize_embeddings(features:Tensor|None=None, labels:Tensor|None=None,
-                         keys:Dict[int, str]|None=None,
-                         dataset:LabeledDataset|None=None, n_dims:int=2,
-                         algorithm:Literal['tsne','pca']='pca') -> None:
-    if dataset is not None and features is not None:
-        raise ValueError('Either pass the feature and label tensor independently, or a loaded LabeledDataset object, not both')
-    if dataset is not None:
-        features = dataset['data']
-        labels = dataset['labels']
-        keys = dataset['key']
+def visualize_embeddings(dataset:LabeledDataset, n_dims:int=2,
+                         algorithm:Literal['tsne','pca']='pca',
+                         reducer:PCA|None=None ) -> None:
 
-    features = features.detach().numpy()
-    labels = labels.detach().numpy()
+    features = dataset['data'].detach().numpy()
+    labels = dataset['labels'].detach().numpy()
+    keys = dataset['key']
 
-    if algorithm == 'tsne':
+    if reducer is not None:
+        reduced = reducer.transform(features)
+    elif algorithm == 'tsne':
         reduced = TSNE(n_components=n_dims, ).fit_transform(features)
     elif algorithm == 'pca':
         reduced = PCA(n_components=n_dims, ).fit_transform(features)
