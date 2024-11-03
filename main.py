@@ -25,6 +25,7 @@ class Args(Namespace):
     load_embeddings:bool
     viz:bool
     n_dims:int
+    dataset_name:str
     # face_size:int
 
 class LabeledDataset(TypedDict):
@@ -45,7 +46,8 @@ def parse_args() -> Args:
     parser.add_argument('--save-embeddings', help='Save the feature embeddings to the output directory instead of continuing the classification', action='store_true')
     parser.add_argument('--load-embeddings', help='Load the feature embeddings from the output directory instead of treating the raw images', action='store_true')
     parser.add_argument('--viz', help='Visualize a 2 or 3 dimensional representaion of the images instead of classifying. Use with n-dims', action='store_true')
-    parser.add_argument('--n-dims', help='The number of dimensions for the visualization', choices=[2, 3], type=int)
+    parser.add_argument('--n-dims', help='The number of dimensions for the visualization', choices=[2, 3], type=int, default=2)
+    parser.add_argument('--dataset-name', help='Name of the file to save the dataset embeddings to', required=False)
     # parser.add_argument('--face-size', help='Size of the detected face image in pixels. Image is square.', default=128, type=int)
     return parser.parse_args()
 
@@ -61,11 +63,11 @@ def main():
 
         result = extract_features(loader, device=device)
         if args.save_embeddings:
-            with open(path.join(args.output_path, 'input.pt'), 'wb') as f:
+            with open(path.join(args.output_path, f'{args.dataset_name}.pt'), 'wb') as f:
                 torch.save(result, f)
     else:
         print(f'Loading data from process pre-extracted tensors')
-        with open(path.join(args.output_path, 'input.pt'), 'rb') as f:
+        with open(path.join(args.output_path, f'{args.dataset_name}.pt'), 'rb') as f:
             result = torch.load(f)
 
 
@@ -80,8 +82,8 @@ def main():
         pca = PCA(n_components=args.n_dims).fit(result['data'])
         visualize_embeddings(dataset=total_result, reducer=pca, n_dims=args.n_dims)
 
-    else:
-        print(classify_features(result, target_result, classifier=args.classifier))
+    preds = classify_features(result, target_result, classifier=args.classifier, viz=args.viz)
+    print(preds)
 
 
 
@@ -147,7 +149,7 @@ def merge_datasets(d1:LabeledDataset, d2:LabeledDataset) -> LabeledDataset:
     return {'data': features, 'labels': labels, 'key':keys}
 
 
-def classify_features(train:LabeledDataset, target:LabeledDataset, classifier:str='knn') -> Dict[str, float]:
+def classify_features(train:LabeledDataset, target:LabeledDataset, classifier:str='knn', viz:bool=False) -> Dict[str, float]:
     print(f'Using {classifier} classifier on input vectors of dimension {train["data"].size(1)}')
 
     if classifier == 'knn':
@@ -155,18 +157,19 @@ def classify_features(train:LabeledDataset, target:LabeledDataset, classifier:st
         probas = model.predict_proba(target['data'].numpy()).mean(0)
 
     elif classifier == 'cos':
-        pred = train['labels'][target['data'].matmul(train['data'].transpose(0,1)).argmax(1)]
-        probas = {}
-        for k in train['key']:
-            probas[k] = ((pred == k).sum()/pred.size(0)).item()
+        with torch.no_grad():
+            preds = target['data'].matmul(train['data'].transpose(0,1))
+            # probas = preds.softmax(1).mean(0).numpy()
+            probas = {}
+            for k in train['key']:
+                probas[k] = preds[:, train['labels'] == k].mean().item()
 
-        return probas
     elif classifier == 'linear':
         model = nn.Linear(512, len(train['key']))
         optimizer = torch.optim.SGD(model.parameters(), lr=1e-3)
         ce_function = torch.nn.CrossEntropyLoss()
         x, y = train['data'], train['labels'].to(int)
-        for epoch in tqdm(range(10)):
+        for epoch in tqdm(range(100), desc='Training linear classifier', unit='epoch'):
             optimizer.zero_grad()
             out = model(x)
             ce_function(out, y)
@@ -174,13 +177,17 @@ def classify_features(train:LabeledDataset, target:LabeledDataset, classifier:st
 
         with torch.no_grad():
             out = model(target['data'])
-            print(out)
             probas = nn.functional.softmax(out, dim=1).mean(0).numpy()
 
     else:
         raise ValueError(f'Unsupported model type {classifier}')
 
-    return {v:probas[k] for k,v in train['key'].items()}
+    probas = {v:probas[k] for k,v in train['key'].items()}
+    if viz:
+        plt.bar(x=probas.keys(), height=probas.values())
+        plt.title(f'Precentage of classifications using {classifier}')
+        plt.show()
+    return probas
 
 if __name__ == '__main__':
     main()

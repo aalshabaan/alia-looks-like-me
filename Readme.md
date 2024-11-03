@@ -9,18 +9,46 @@ I'll explore multiple face recognition, feature extraction, classification, and 
 
 This is going to be a long-running project where I try out new methods as I find them interesting (and find the time to do so between diaper changes), and keep evaluating all methods observed thus far wih newer pictures as my little one grows up (TO LOOK MORE AND MORE LIKE ME!)
 
+The classification results are an average prediction probability (or similarity in case of using `cos` as a "classifier") of the N images of Alia that I have in the target dataset. This yields a single number per class in the input dataset (pictures of me and my wife)
+
 ## Used Methods
 This will have a list of used models so far, along with their results.
-- Facenet with MTCNN
+
+### Face detection
+MTCNN. PyTorch implementation can be found in references
+
+### Feature extraction
+Facenet. PyTorch implementation can be found in references
+
 
 ## Results
 ### First exploration
-I started by extracting facial features using Facenet and then reducing the extracted 512-dimensional vectors to 2 dimensions using PCA in order to visualize them. Thies yielded the following figure
+I started by extracting facial features using Facenet and then reducing the extracted 512-dimensional vectors to 2 dimensions using PCA in order to visualize them. This yielded the following figure
 
 ![PCA representatio of 3 faces](resources/pca.png)
 
 This is not very encouraging and would suggest Alia looks indeed more like my wife than me. NOT GOOD ENOUGH!
 
+### Classification
+Starting with old trusty, the KNN classifier. This guy suggests that Alia looks 100% like my wife. DAMMIT!
+![KNN Classification probabilities](resources/knn.png)
+
+Maybe just looking at similarity, instead of classification, is a better indicator of, well SIMILARITY OF FACES! Maybe I have a winner here that will prove my point! 
+![COS similarities](resources/cos.png)
+Nevermind, this suggests that my daughter is twice as similar to my wife as she is to me :( I should just give up?
+
+Wait, I know, neural networks are a thing, right? people seem to really trust them and take their output as truth, so let's train a very simple one (actually, just a single linear layer because I'm lazy)
+![Linear Classification probabilities](resources/linear.png)
+YES! This horrible, terrible model, going from 512 dimensions to 2 classes in a single step, trained only on 10 photos each of me and my wife, suggests that I'M THE WINNER! THIS IS SCIENCE, PEOPLE!
+
+## Future
+Unfortunately, my short vacation is at an end and I may develop this thing even slower, but I plan on adding more family members to the base dataset, and keep updating the target dataset with newer and newer pictures of Alia (possibly separating them by age to see how the results evolve in time).
+Doing manual feature extraction is something that I definitely want to do as well, although that takes more time
+
+
 ## References
 Here is a list of the resources that I've found useful in this endeavor
  - https://github.com/timesler/facenet-pytorch. A PyTorch implementation of facenet and MTCNN, this is my starting point. 
+
+## License
+Feel free to use this crappy code as you see fit, MIT style yo!
