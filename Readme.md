@@ -11,11 +11,11 @@ This is going to be a long-running project where I try out new methods as I find
 
 The classification results are an average prediction probability (or similarity in case of using `cos` as a "classifier") of the N images of Alia that I have in the target dataset. This yields a single number per class in the input dataset (pictures of me and my wife)
 
-## Geting Started
+## Getting Started
 
 If you, for some reason, decide to try and use this to solve domestic disputes at home regarding face similarity issues, here's how to do it
 1. Clone this repo locally
-2. Download the required libraries (I would recommend creating a venv fist using `python -m venv <PATH_TO_VENJV>`
+2. Download the required libraries using `pip install -r requirements.txt` (I would recommend creating a venv fist using `python -m venv <PATH_TO_VENJV>`)
 3. Curate a dataset of pictures of the parties involved/. Consider the faces of the people you want to judge as the training data (me and my wife in this case) and the photos of the person you want to see the resemblance to (daughter in this case) as test data.
 4. Put the training data into a directory, where pictures of the same person are grouped in a single subdirectory (example `/training/me, /training/wife`. And put the test data in another directory.
 5. Run the program using `python main.py` and give the appropriate CLI arguments as indicated by the help text.
