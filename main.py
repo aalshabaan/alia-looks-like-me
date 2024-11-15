@@ -12,7 +12,10 @@ import seaborn as sns
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
 import matplotlib.pyplot as plt
+from PIL.Image import Image
 
 class Args(Namespace):
     input_classes_path:str
@@ -79,8 +82,9 @@ def main():
 
     if args.viz:
         total_result = merge_datasets(result, target_result)
+        normalizer = StandardScaler().fit(total_result['data'])
         pca = PCA(n_components=args.n_dims).fit(result['data'])
-        visualize_embeddings(dataset=total_result, reducer=pca, n_dims=args.n_dims)
+        visualize_embeddings(dataset=total_result, reducer=pca, normalizer=normalizer, n_dims=args.n_dims)
 
     preds = classify_features(result, target_result, classifier=args.classifier, viz=args.viz)
     print(preds)
@@ -89,12 +93,15 @@ def main():
 
 def visualize_embeddings(dataset:LabeledDataset, n_dims:int=2,
                          algorithm:Literal['tsne','pca']='pca',
-                         reducer:PCA|None=None ) -> None:
+                         reducer:PCA|Pipeline|None=None,
+                         normalizer:StandardScaler|None=None) -> None:
 
     features = dataset['data'].detach().numpy()
     labels = dataset['labels'].detach().numpy()
     keys = dataset['key']
 
+    if normalizer is not None:
+        features = normalizer.transform(features)
     if reducer is not None:
         reduced = reducer.transform(features)
     elif algorithm == 'tsne':
@@ -130,13 +137,15 @@ def extract_features(loader:DataLoader, device:torch.device=torch.device('cpu'))
     with torch.no_grad():
         for data, label in tqdm(loader, desc='Extracting features'):
             face = detector(data)
+            if face is None:
+                continue
             face = transform(face)
             features[i,:] = extractor(face)
             labels[i] = label
             i+=1
             # with open('test.pt', 'wb') as f:
             #     torch.save(features, f)
-    return {'data': features, 'labels':labels, 'key': idx_to_class}
+    return {'data': features[:i,], 'labels':labels[:i], 'key': idx_to_class}
 
 
 def merge_datasets(d1:LabeledDataset, d2:LabeledDataset) -> LabeledDataset:
@@ -158,10 +167,12 @@ def classify_features(train:LabeledDataset, target:LabeledDataset, classifier:st
 
     elif classifier == 'cos':
         with torch.no_grad():
-            preds = target['data'].matmul(train['data'].transpose(0,1))
-            # probas = preds.softmax(1).mean(0).numpy()
+            target_normalized = target['data'].t().div(target['data'].norm(2,1)).t()
+            train_normalized = train['data'].t().div(train['data'].norm(2,1)).t()
+            preds = target_normalized.matmul(train_normalized.t())
             probas = {}
             for k in train['key']:
+                print(f'{(train["labels"] == k).sum()} samples match label {k}')
                 probas[k] = preds[:, train['labels'] == k].mean().item()
 
     elif classifier == 'linear':
