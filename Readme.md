@@ -39,14 +39,19 @@ This is not very encouraging and would suggest Alia looks indeed more like my wi
 
 ### Classification
 Starting with old trusty, the KNN classifier. This guy suggests that Alia looks 100% like my wife. DAMMIT!
+
 ![KNN Classification probabilities](resources/knn.png)
 
 Maybe just looking at similarity, instead of classification, is a better indicator of, well SIMILARITY OF FACES! Maybe I have a winner here that will prove my point! 
+
 ![COS similarities](resources/cos.png)
+
 Nevermind, this suggests that my daughter is twice as similar to my wife as she is to me :( I should just give up?
 
 Wait, I know, neural networks are a thing, right? people seem to really trust them and take their output as truth, so let's train a very simple one (actually, just a single linear layer because I'm lazy)
+
 ![Linear Classification probabilities](resources/linear.png)
+
 YES! This horrible, terrible model, going from 512 dimensions to 2 classes in a single step, trained only on 10 photos each of me and my wife, suggests that I'M THE WINNER! THIS IS SCIENCE, PEOPLE!
 
 ## Future
